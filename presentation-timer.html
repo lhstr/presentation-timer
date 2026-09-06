@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{color-scheme:dark}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>登壇タイマー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* ── 単一テーマ（ステージ用ダーク）を明示的に塗る ───────────────── */
+:root{
+  --bg:#0B0D10;
+  --bg-2:#12151A;
+  --panel:#171B21;
+  --panel-hi:#1F242C;
+  --line:#2A303A;
+  --line-soft:#20252D;
+  --dim:#7C8794;
+  --dim-2:#9AA4B1;
+  --text:#E9ECF1;
+  --safe:#37D07F;
+  --caution:#FFC246;
+  --warn:#FF8A3D;
+  --crit:#FF4256;
+  --phase:var(--safe);
+  --phase-ink:#E9ECF1;
+
+  --f-num:"Saira Condensed","Helvetica Neue",Arial,sans-serif;
+  --f-ja:"Zen Kaku Gothic New","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--f-ja);
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--phase);outline-offset:2px}
+
+/* ── 全体レイアウト ─────────────────────────────────────────── */
+.stage{
+  height:100dvh;
+  display:grid;
+  grid-template-rows:auto 1fr auto;
+  gap:0;
+}
+
+/* ── 上段：タリーレール ─────────────────────────────────────── */
+.rail{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:1.5rem;flex-wrap:wrap;
+  padding:.85rem clamp(1rem,3vw,2.25rem);
+  border-bottom:1px solid var(--line-soft);
+  background:linear-gradient(180deg,var(--bg-2),var(--bg));
+}
+.brand{display:flex;align-items:baseline;gap:.7rem;min-width:0}
+.brand-dot{
+  width:.62rem;height:.62rem;border-radius:50%;
+  background:var(--phase);box-shadow:0 0 12px var(--phase);
+  align-self:center;flex:none;
+  transition:background .4s ease,box-shadow .4s ease;
+}
+.brand-name{font-weight:700;letter-spacing:.04em;font-size:.95rem}
+.brand-sub{
+  font-family:var(--f-num);font-size:.78rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--dim);white-space:nowrap;
+}
+.chips{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+.chips-label{
+  font-family:var(--f-num);font-size:.72rem;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--dim);margin-right:.35rem;
+}
+.chip{
+  font-family:var(--f-num);font-weight:600;font-size:.92rem;letter-spacing:.06em;
+  padding:.22rem .62rem;border-radius:2px;
+  border:1px solid var(--line);background:transparent;color:var(--dim);
+  transition:color .25s,border-color .25s,background .25s,box-shadow .25s;
+}
+.chip[data-state="passed"]{color:#4C5560;border-color:var(--line-soft);text-decoration:line-through;text-decoration-thickness:1px}
+.chip[data-state="next"]{color:var(--text);border-color:var(--phase);}
+.chip[data-state="live"]{
+  color:#0B0D10;background:var(--tone,var(--phase));border-color:var(--tone,var(--phase));
+  box-shadow:0 0 18px color-mix(in srgb,var(--tone,var(--phase)) 55%,transparent);
+}
+
+/* ── 中段：ボード ───────────────────────────────────────────── */
+.board{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:clamp(.5rem,1.6vh,1.4rem);
+  padding:clamp(.75rem,2vh,2rem) clamp(1rem,3vw,2.25rem);
+  min-height:0;
+}
+
+.banner{
+  font-family:var(--f-ja);font-weight:700;
+  font-size:clamp(1.5rem,5.2vw,3.4rem);
+  letter-spacing:.03em;line-height:1;
+  color:var(--tone,var(--phase));
+  opacity:0;transform:translateY(.35em);
+  transition:opacity .18s ease,transform .18s ease;
+  min-height:1.05em;text-align:center;
+  text-shadow:0 0 34px color-mix(in srgb,var(--tone,var(--phase)) 45%,transparent);
+}
+.banner.show{opacity:1;transform:none}
+
+.clock{
+  font-family:var(--f-num);font-weight:600;
+  font-size:clamp(6rem,25vw,24rem);
+  line-height:.82;letter-spacing:-.015em;
+  font-variant-numeric:tabular-nums;
+  color:var(--phase-ink);
+  transition:color .5s ease;
+  text-shadow:0 0 60px color-mix(in srgb,var(--phase) 22%,transparent);
+}
+.stage[data-phase="over"] .clock{animation:pulse 1.05s steps(1,end) infinite}
+@keyframes pulse{0%,49%{opacity:1}50%,100%{opacity:.22}}
+
+/* 進捗メーター：通知タイミングをノッチで刻む */
+.meter{width:min(1180px,100%);display:flex;flex-direction:column;gap:.5rem}
+.track{
+  position:relative;height:.72rem;border-radius:1px;
+  background:var(--panel);border:1px solid var(--line-soft);overflow:hidden;
+}
+.fill{
+  position:absolute;inset:0 auto 0 0;width:100%;
+  background:var(--phase);opacity:.9;
+  transition:background .5s ease;
+}
+.notch{
+  position:absolute;top:0;bottom:0;width:2px;
+  background:var(--bg);opacity:.85;transform:translateX(-1px);
+}
+.ticks{position:relative;height:1.05rem}
+.tick-label{
+  position:absolute;top:0;transform:translateX(-50%);
+  font-family:var(--f-num);font-size:.76rem;letter-spacing:.1em;
+  color:var(--dim);white-space:nowrap;
+}
+.readout{
+  display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  font-family:var(--f-num);font-size:.86rem;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--dim);
+}
+.readout b{color:var(--dim-2);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* 画面ふちのフラッシュ */
+.flash{
+  position:fixed;inset:0;pointer-events:none;opacity:0;
+  box-shadow:inset 0 0 0 14px var(--tone,var(--phase)),inset 0 0 90px 14px color-mix(in srgb,var(--tone,var(--phase)) 40%,transparent);
+}
+.flash.fire{animation:flash 1.5s ease-out}
+@keyframes flash{0%{opacity:0}8%{opacity:1}30%{opacity:.25}45%{opacity:.9}100%{opacity:0}}
+
+/* ── 下段：コンソール ───────────────────────────────────────── */
+.console{
+  display:flex;align-items:flex-end;gap:clamp(1rem,3vw,2.5rem);flex-wrap:wrap;
+  padding:clamp(.85rem,2vh,1.35rem) clamp(1rem,3vw,2.25rem);
+  border-top:1px solid var(--line-soft);
+  background:var(--bg-2);
+  transition:opacity .5s ease;
+}
+.console.idle{opacity:.14}
+.group{display:flex;flex-direction:column;gap:.5rem;min-width:0}
+.group-label{
+  font-family:var(--f-num);font-size:.72rem;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--dim);
+}
+.row{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+
+.btn{
+  border:1px solid var(--line);background:var(--panel);
+  padding:.5rem .95rem;border-radius:3px;cursor:pointer;
+  font-size:.9rem;letter-spacing:.02em;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.btn:hover{background:var(--panel-hi);border-color:#39414D}
+.btn[aria-pressed="true"]{background:var(--panel-hi);border-color:var(--phase);color:var(--text)}
+.btn.preset{font-family:var(--f-num);font-weight:600;font-size:1rem;letter-spacing:.04em;padding:.42rem .7rem;color:var(--dim-2)}
+.btn.preset[aria-pressed="true"]{color:var(--text)}
+.btn.primary{
+  background:var(--phase);border-color:var(--phase);color:#0B0D10;
+  font-weight:700;min-width:9.5rem;justify-content:center;
+  transition:background .4s ease,border-color .4s ease;
+}
+.btn.primary:hover{filter:brightness(1.08);background:var(--phase)}
+.btn.ghost{color:var(--dim-2)}
+
+.timeset{display:flex;align-items:center;gap:.3rem;font-family:var(--f-num)}
+.timeset input{
+  width:3.4rem;text-align:center;font-family:var(--f-num);font-weight:600;font-size:1.05rem;
+  background:var(--panel);border:1px solid var(--line);border-radius:3px;
+  padding:.4rem .3rem;font-variant-numeric:tabular-nums;
+}
+.timeset span{font-size:.86rem;color:var(--dim);font-family:var(--f-ja)}
+
+.hint{
+  font-family:var(--f-num);font-size:.76rem;letter-spacing:.12em;
+  text-transform:uppercase;color:#5C6673;margin-left:auto;text-align:right;
+  line-height:1.7;
+}
+.hint kbd{
+  font-family:var(--f-num);border:1px solid var(--line);border-radius:2px;
+  padding:0 .3rem;color:var(--dim);
+}
+
+@media (max-width:720px){
+  .hint{display:none}
+  .console{gap:1rem}
+  .rail{gap:.6rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .flash.fire,.stage[data-phase="over"] .clock{animation:none}
+  .flash.fire{opacity:.75}
+  *{transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage" data-phase="safe">
+  <header class="rail">
+    <div class="brand">
+      <span class="brand-dot" id="dot"></span>
+      <span class="brand-name">登壇タイマー</span>
+      <span class="brand-sub" id="modeLabel">READY</span>
+    </div>
+    <div class="chips" id="chips"><span class="chips-label">通知</span></div>
+  </header>
+
+  <main class="board">
+    <div class="flash" id="flash"></div>
+    <div class="banner" id="banner" role="status" aria-live="assertive"></div>
+    <div class="clock" id="clock" aria-label="残り時間">05:00</div>
+
+    <div class="meter">
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div class="ticks" id="ticks"></div>
+      <div class="readout">
+        <span>持ち時間 <b id="totalOut">5:00</b></span>
+        <span>経過 <b id="elapsedOut">0:00</b></span>
+      </div>
+    </div>
+  </main>
+
+  <section class="console" id="console">
+    <div class="group">
+      <span class="group-label">持ち時間</span>
+      <div class="row" id="presets"></div>
+      <div class="row timeset">
+        <input id="inMin" type="number" min="0" max="180" step="1" value="5" inputmode="numeric" aria-label="分"><span>分</span>
+        <input id="inSec" type="number" min="0" max="59" step="5" value="0" inputmode="numeric" aria-label="秒"><span>秒</span>
+        <button class="btn ghost" id="applyTime" type="button">セット</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">操作</span>
+      <div class="row">
+        <button class="btn primary" id="startBtn" type="button">開始</button>
+        <button class="btn" id="resetBtn" type="button">リセット</button>
+        <button class="btn" id="fsBtn" type="button">全画面</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <span class="group-label">音</span>
+      <div class="row">
+        <button class="btn" id="muteBtn" type="button" aria-pressed="false">音あり</button>
+        <button class="btn" id="tickBtn" type="button" aria-pressed="true">ラスト10秒 秒読み</button>
+        <button class="btn ghost" id="testBtn" type="button">音を確認</button>
+      </div>
+    </div>
+
+    <div class="hint">
+      <kbd>Space</kbd> 開始／一時停止　<kbd>R</kbd> リセット<br>
+      <kbd>F</kbd> 全画面　<kbd>M</kbd> ミュート
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ── 通知タイミング定義 ─────────────────────────────── */
+  var MILESTONES = [
+    {s:180, label:"のこり 3分",  short:"3分",  tone:"caution", notes:[[880,.14],[880,.14]]},
+    {s:120, label:"のこり 2分",  short:"2分",  tone:"caution", notes:[[880,.14],[1046,.14]]},
+    {s:60,  label:"のこり 1分",  short:"1分",  tone:"warn",    notes:[[988,.14],[1174,.14],[1318,.2]]},
+    {s:30,  label:"のこり 30秒", short:"30秒", tone:"crit",    notes:[[1174,.12],[1174,.12],[1396,.22]]},
+    {s:10,  label:"のこり 10秒", short:"10秒", tone:"crit",    notes:[[1318,.1],[1318,.1],[1318,.1],[1568,.26]]}
+  ];
+  var TONE = {safe:"#37D07F", caution:"#FFC246", warn:"#FF8A3D", crit:"#FF4256"};
+
+  var $ = function(id){ return document.getElementById(id); };
+  var stage=$("stage"), clockEl=$("clock"), fillEl=$("fill"), ticksEl=$("ticks"),
+      chipsEl=$("chips"), bannerEl=$("banner"), flashEl=$("flash"), consoleEl=$("console"),
+      startBtn=$("startBtn"), resetBtn=$("resetBtn"), fsBtn=$("fsBtn"),
+      muteBtn=$("muteBtn"), tickBtn=$("tickBtn"), testBtn=$("testBtn"),
+      inMin=$("inMin"), inSec=$("inSec"), applyBtn=$("applyTime"), presetsEl=$("presets"),
+      totalOut=$("totalOut"), elapsedOut=$("elapsedOut"), modeLabel=$("modeLabel"), dot=$("dot");
+
+  /* ── 状態 ───────────────────────────────────────────── */
+  var totalMs = 5*60*1000;
+  var remainMs = totalMs;
+  var running = false;
+  var endAt = 0;
+  var fired = {};
+  var lastTickSec = null;
+  var raf = 0;
+  var bannerTimer = 0;
+  var muted = false;
+  var tickOn = true;
+  var wakeLock = null;
+
+  /* ── 設定の保存（この端末のブラウザ内だけの控え） ────── */
+  function saveCfg(){
+    try{
+      localStorage.setItem("stage-timer", JSON.stringify({t:totalMs, m:muted, k:tickOn}));
+    }catch(e){}
+  }
+  function loadCfg(){
+    try{
+      var raw = localStorage.getItem("stage-timer");
+      if(!raw) return;
+      var c = JSON.parse(raw);
+      if(c && typeof c.t === "number" && c.t > 0 && c.t <= 180*60*1000) totalMs = c.t;
+      if(c && typeof c.m === "boolean") muted = c.m;
+      if(c && typeof c.k === "boolean") tickOn = c.k;
+    }catch(e){}
+  }
+
+  /* ── 音（Web Audio・外部ファイルなし） ──────────────── */
+  var ac = null, live = [];
+  function audio(){
+    if(!ac){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      ac = new C();
+    }
+    if(ac.state === "suspended"){ ac.resume(); }
+    return ac;
+  }
+  function beep(at, dur, freq, vol){
+    var c = audio(); if(!c || muted) return;
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(at); o.stop(at + dur + 0.03);
+    live.push(o);
+    o.onended = function(){ var i = live.indexOf(o); if(i>=0) live.splice(i,1); };
+  }
+  function stopSound(){
+    for(var i=live.length-1;i>=0;i--){ try{ live[i].stop(); }catch(e){} }
+    live = [];
+  }
+  function playChime(notes){
+    var c = audio(); if(!c) return;
+    var t = c.currentTime + 0.02, i;
+    for(i=0;i<notes.length;i++){
+      beep(t, notes[i][1], notes[i][0], 0.26);
+      t += notes[i][1] + 0.045;
+    }
+  }
+  function playTick(){
+    var c = audio(); if(!c) return;
+    beep(c.currentTime + 0.01, 0.05, 1760, 0.14);
+  }
+  function playAlarm(){
+    var c = audio(); if(!c) return;
+    var t0 = c.currentTime + 0.02, cyc, i;
+    for(cyc=0; cyc<6; cyc++){
+      for(i=0;i<3;i++){
+        beep(t0 + cyc*1.15 + i*0.19, 0.15, i===2 ? 784 : 1046, 0.34);
+      }
+    }
+  }
+
+  /* ── 画面の更新 ─────────────────────────────────────── */
+  function fmt(ms){
+    var over = ms < 0;
+    var sec = over ? Math.floor(Math.abs(ms)/1000) : Math.ceil(ms/1000);
+    var m = Math.floor(sec/60), s = sec % 60;
+    return (over ? "+" : "") + (m<10?"0":"") + m + ":" + (s<10?"0":"") + s;
+  }
+  function fmtLoose(ms){
+    var sec = Math.max(0, Math.round(ms/1000));
+    var m = Math.floor(sec/60), s = sec % 60;
+    return m + ":" + (s<10?"0":"") + s;
+  }
+  function phaseOf(ms){
+    if(ms <= 0) return "over";
+    var s = ms/1000;
+    if(s <= 30) return "crit";
+    if(s <= 60) return "warn";
+    if(s <= 180) return "caution";
+    return "safe";
+  }
+  function activeMilestones(){
+    var out = [], i;
+    for(i=0;i<MILESTONES.length;i++){
+      if(MILESTONES[i].s < totalMs/1000) out.push(MILESTONES[i]);
+    }
+    return out;
+  }
+  function setPhase(p){
+    if(stage.dataset.phase === p) return;
+    stage.dataset.phase = p;
+    var col = p === "over" ? TONE.crit : TONE[p];
+    document.documentElement.style.setProperty("--phase", col);
+    document.documentElement.style.setProperty("--phase-ink", p === "safe" ? "#E9ECF1" : col);
+  }
+
+  function buildRail(){
+    var list = activeMilestones(), i;
+    chipsEl.innerHTML = '<span class="chips-label">通知</span>';
+    for(i=0;i<list.length;i++){
+      var c = document.createElement("span");
+      c.className = "chip";
+      c.textContent = list[i].short;
+      c.dataset.state = "pending";
+      c.dataset.s = list[i].s;
+      c.style.setProperty("--tone", TONE[list[i].tone]);
+      chipsEl.appendChild(c);
+    }
+    var z = document.createElement("span");
+    z.className = "chip"; z.textContent = "0秒"; z.dataset.state = "pending"; z.dataset.s = "0";
+    z.style.setProperty("--tone", TONE.crit);
+    chipsEl.appendChild(z);
+
+    ticksEl.innerHTML = "";
+    for(i=0;i<list.length;i++){
+      var pos = list[i].s / (totalMs/1000) * 100;
+      var l = document.createElement("span");
+      l.className = "tick-label";
+      l.style.left = pos + "%";
+      l.textContent = list[i].short;
+      ticksEl.appendChild(l);
+    }
+    var old = fillEl.parentNode.querySelectorAll(".notch");
+    for(i=0;i<old.length;i++) old[i].remove();
+    for(i=0;i<list.length;i++){
+      var n = document.createElement("div");
+      n.className = "notch";
+      n.style.left = (list[i].s / (totalMs/1000) * 100) + "%";
+      fillEl.parentNode.appendChild(n);
+    }
+  }
+
+  function updateChips(){
+    var chips = chipsEl.querySelectorAll(".chip"), i, s, nextSet = false;
+    for(i=0;i<chips.length;i++){
+      s = Number(chips[i].dataset.s);
+      if(fired[s]){
+        chips[i].dataset.state = (Date.now() - fired[s] < 2800) ? "live" : "passed";
+      }else if(!nextSet && remainMs/1000 > s){
+        chips[i].dataset.state = "next"; nextSet = true;
+      }else{
+        chips[i].dataset.state = "pending";
+      }
+    }
+  }
+
+  function render(){
+    clockEl.textContent = fmt(remainMs);
+    setPhase(phaseOf(remainMs));
+    var pct = Math.max(0, Math.min(1, remainMs / totalMs));
+    fillEl.style.width = (pct*100) + "%";
+    totalOut.textContent = fmtLoose(totalMs);
+    elapsedOut.textContent = fmtLoose(Math.min(totalMs, totalMs - remainMs) + Math.max(0, -remainMs));
+    modeLabel.textContent = remainMs <= 0 ? "OVERTIME" : (running ? "ON AIR" : (remainMs === totalMs ? "READY" : "PAUSED"));
+    startBtn.textContent = running ? "一時停止" : (remainMs === totalMs ? "開始" : "再開");
+    updateChips();
+  }
+
+  function banner(text, tone){
+    bannerEl.textContent = text;
+    bannerEl.style.setProperty("--tone", TONE[tone]);
+    bannerEl.classList.add("show");
+    flashEl.style.setProperty("--tone", TONE[tone]);
+    flashEl.classList.remove("fire");
+    void flashEl.offsetWidth;
+    flashEl.classList.add("fire");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(function(){ bannerEl.classList.remove("show"); }, 2800);
+  }
+
+  /* ── 通知の判定 ─────────────────────────────────────── */
+  function checkAlerts(){
+    var list = activeMilestones(), i, m;
+    for(i=0;i<list.length;i++){
+      m = list[i];
+      if(!fired[m.s] && remainMs <= m.s*1000){
+        fired[m.s] = Date.now();
+        banner(m.label, m.tone);
+        playChime(m.notes);
+      }
+    }
+    if(!fired[0] && remainMs <= 0){
+      fired[0] = Date.now();
+      banner("終了 — 時間です", "crit");
+      playAlarm();
+    }
+    if(tickOn && remainMs > 0 && remainMs <= 10000){
+      var cur = Math.ceil(remainMs/1000);
+      if(cur !== lastTickSec){
+        if(lastTickSec !== null) playTick();
+        lastTickSec = cur;
+      }
+    }
+  }
+
+  /* ── ループ ─────────────────────────────────────────── */
+  function loop(){
+    if(running){
+      remainMs = endAt - performance.now();
+      checkAlerts();
+      render();
+      raf = requestAnimationFrame(loop);
+    }
+  }
+
+  /* ── 操作 ───────────────────────────────────────────── */
+  function start(){
+    audio();
+    running = true;
+    endAt = performance.now() + remainMs;
+    lastTickSec = null;
+    requestWake();
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+    render();
+  }
+  function pause(){
+    running = false;
+    cancelAnimationFrame(raf);
+    stopSound();
+    releaseWake();
+    render();
+  }
+  function reset(){
+    pause();
+    remainMs = totalMs;
+    fired = {};
+    lastTickSec = null;
+    bannerEl.classList.remove("show");
+    flashEl.classList.remove("fire");
+    render();
+  }
+  function setTotal(ms){
+    totalMs = Math.max(5000, Math.min(180*60*1000, ms));
+    inMin.value = Math.floor(totalMs/60000);
+    inSec.value = Math.round(totalMs%60000/1000);
+    buildRail();
+    reset();
+    markPreset();
+    saveCfg();
+  }
+
+  /* ── 画面スリープ防止 ───────────────────────────────── */
+  function requestWake(){
+    if(!("wakeLock" in navigator)) return;
+    try{
+      navigator.wakeLock.request("screen").then(function(w){ wakeLock = w; }, function(){});
+    }catch(e){}
+  }
+  function releaseWake(){
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible" && running) requestWake();
+  });
+
+  /* ── プリセット ─────────────────────────────────────── */
+  var PRESETS = [3,5,7,10,15,20,30,45];
+  (function(){
+    for(var i=0;i<PRESETS.length;i++){
+      (function(min){
+        var b = document.createElement("button");
+        b.type = "button"; b.className = "btn preset"; b.textContent = min + "分";
+        b.dataset.min = min;
+        b.setAttribute("aria-pressed","false");
+        b.addEventListener("click", function(){ setTotal(min*60*1000); });
+        presetsEl.appendChild(b);
+      })(PRESETS[i]);
+    }
+  })();
+  function markPreset(){
+    var bs = presetsEl.querySelectorAll(".preset"), i;
+    for(i=0;i<bs.length;i++){
+      bs[i].setAttribute("aria-pressed", Number(bs[i].dataset.min)*60000 === totalMs ? "true" : "false");
+    }
+  }
+
+  /* ── イベント ───────────────────────────────────────── */
+  startBtn.addEventListener("click", function(){ running ? pause() : start(); });
+  resetBtn.addEventListener("click", reset);
+  applyBtn.addEventListener("click", function(){
+    var m = Math.max(0, Math.min(180, Number(inMin.value)||0));
+    var s = Math.max(0, Math.min(59, Number(inSec.value)||0));
+    setTotal(m*60000 + s*1000);
+  });
+  inMin.addEventListener("keydown", function(e){ if(e.key === "Enter") applyBtn.click(); });
+  inSec.addEventListener("keydown", function(e){ if(e.key === "Enter") applyBtn.click(); });
+
+  fsBtn.addEventListener("click", function(){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else if(document.documentElement.requestFullscreen){ document.documentElement.requestFullscreen(); }
+  });
+  document.addEventListener("fullscreenchange", function(){
+    fsBtn.textContent = document.fullscreenElement ? "全画面を解除" : "全画面";
+  });
+
+  muteBtn.addEventListener("click", function(){
+    muted = !muted;
+    if(muted) stopSound();
+    muteBtn.textContent = muted ? "ミュート中" : "音あり";
+    muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    saveCfg();
+  });
+  tickBtn.addEventListener("click", function(){
+    tickOn = !tickOn;
+    tickBtn.setAttribute("aria-pressed", tickOn ? "true" : "false");
+    saveCfg();
+  });
+  testBtn.addEventListener("click", function(){
+    audio();
+    banner("のこり 1分", "warn");
+    playChime(MILESTONES[2].notes);
+  });
+
+  document.addEventListener("keydown", function(e){
+    var t = e.target;
+    if(t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    var k = e.key.toLowerCase();
+    if(e.code === "Space" || k === " "){ e.preventDefault(); running ? pause() : start(); }
+    else if(k === "r"){ e.preventDefault(); reset(); }
+    else if(k === "f"){ e.preventDefault(); fsBtn.click(); }
+    else if(k === "m"){ e.preventDefault(); muteBtn.click(); }
+    else if(k === "escape"){ stopSound(); }
+  });
+
+  /* ── 本番中はコンソールを控えめに ───────────────────── */
+  var idleTimer = 0;
+  function wake(){
+    consoleEl.classList.remove("idle");
+    clearTimeout(idleTimer);
+    if(running){
+      idleTimer = setTimeout(function(){ consoleEl.classList.add("idle"); }, 4000);
+    }
+  }
+  ["mousemove","pointerdown","keydown","touchstart"].forEach(function(ev){
+    document.addEventListener(ev, wake, {passive:true});
+  });
+  consoleEl.addEventListener("mouseenter", wake);
+
+  var _start = start, _pause = pause;
+  start = function(){ _start(); wake(); };
+  pause = function(){ _pause(); wake(); };
+
+  /* ── 初期化 ─────────────────────────────────────────── */
+  loadCfg();
+  muteBtn.textContent = muted ? "ミュート中" : "音あり";
+  muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+  tickBtn.setAttribute("aria-pressed", tickOn ? "true" : "false");
+  inMin.value = Math.floor(totalMs/60000);
+  inSec.value = Math.round(totalMs%60000/1000);
+  remainMs = totalMs;
+  buildRail();
+  markPreset();
+  render();
+})();
+</script>
+
+</body>
+</html>
