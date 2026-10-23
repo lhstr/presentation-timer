@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14100D">
+<title>ドリップタイマー</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* ── 単一テーマ（キッチン用ダーク）を明示的に塗る ───────────────── */
+:root{
+  color-scheme:dark;
+  --bg:#14100D;
+  --bg-2:#1B1612;
+  --panel:#231D18;
+  --panel-hi:#2E2620;
+  --line:#3A3029;
+  --line-soft:#2A231E;
+  --dim:#8F8274;
+  --dim-2:#B3A594;
+  --text:#F1E9DE;
+  --kraft:#D9B98C;
+  --pour:#F0A54A;
+  --done:#7FCB8E;
+  --accent:var(--kraft);
+
+  --f-num:"Space Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+  --f-ja:"Zen Kaku Gothic New","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--f-ja);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.stage{
+  min-height:100dvh;
+  display:flex;flex-direction:column;
+  max-width:46rem;margin:0 auto;
+  padding:env(safe-area-inset-top) 16px calc(1rem + env(safe-area-inset-bottom));
+}
+.stage[data-phase="pour"]{--accent:var(--pour)}
+.stage[data-phase="done"]{--accent:var(--done)}
+
+/* ── 上段：レシピ選択 ───────────────────────────────────────── */
+.top{
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
+  padding:1rem 0 .75rem;border-bottom:1px solid var(--line-soft);
+}
+.brand{display:flex;align-items:baseline;gap:.6rem}
+.brand-name{font-weight:700;letter-spacing:.06em;font-size:1rem}
+.brand-sub{font-family:var(--f-num);font-size:.72rem;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.seg{display:flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--bg-2)}
+.seg button{
+  border:0;background:transparent;cursor:pointer;
+  padding:.4rem .9rem;border-radius:999px;font-size:.88rem;color:var(--dim-2);
+}
+.seg button[aria-pressed="true"]{background:var(--kraft);color:#1A140F;font-weight:700}
+.seg button:disabled{cursor:not-allowed;opacity:.5}
+
+.spec{
+  display:grid;grid-template-columns:repeat(5,auto);justify-content:space-between;gap:.5rem;
+  padding:.7rem 0;border-bottom:1px solid var(--line-soft);
+  font-size:.8rem;color:var(--dim-2);
+}
+.spec span{display:flex;flex-direction:column;gap:.1rem;white-space:nowrap}
+.spec b{font-family:var(--f-num);font-size:1rem;color:var(--text);font-weight:700}
+
+/* ── 中段：時計と指示 ───────────────────────────────────────── */
+.board{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.9rem;padding:1.25rem 0;text-align:center;
+}
+.mode{
+  font-family:var(--f-num);font-size:.75rem;letter-spacing:.2em;color:var(--dim);
+  display:flex;align-items:center;gap:.5rem;
+}
+.mode::before{
+  content:"";width:.55rem;height:.55rem;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 10px var(--accent);
+}
+.clock{
+  font-family:var(--f-num);font-weight:700;
+  font-size:clamp(4.5rem,22vw,9.5rem);
+  line-height:.9;letter-spacing:-.04em;
+  font-variant-numeric:tabular-nums;
+}
+.now{
+  width:100%;
+  border:1px solid var(--line);border-radius:14px;background:var(--panel);
+  padding:1rem 1.1rem;display:flex;flex-direction:column;gap:.35rem;
+  transition:border-color .3s,box-shadow .3s;
+}
+.stage[data-phase="pour"] .now{border-color:var(--pour);box-shadow:0 0 0 1px var(--pour),0 0 28px rgba(240,165,74,.18)}
+.stage[data-phase="done"] .now{border-color:var(--done)}
+.now-label{font-size:.82rem;color:var(--dim-2);letter-spacing:.04em}
+.now-main{
+  font-size:clamp(1.6rem,7vw,2.4rem);font-weight:700;line-height:1.2;
+  color:var(--accent);transition:color .3s;
+}
+.now-main .g{font-family:var(--f-num);letter-spacing:-.02em}
+.now-sub{font-size:.85rem;color:var(--dim-2)}
+.next{
+  display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;
+  margin-top:.35rem;padding-top:.6rem;border-top:1px dashed var(--line);
+  font-size:.88rem;color:var(--dim-2);text-align:left;
+}
+.next b{font-family:var(--f-num);font-size:1.5rem;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.next b.soon{color:var(--pour)}
+
+/* 進捗バー：通知タイミングをノッチで刻む */
+.track{
+  position:relative;width:100%;height:.5rem;border-radius:999px;
+  background:var(--panel);overflow:hidden;
+}
+.fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);transition:background .3s}
+.notch{position:absolute;top:0;bottom:0;width:2px;background:var(--bg);transform:translateX(-1px)}
+
+/* ── ステップ一覧 ───────────────────────────────────────────── */
+.steps{list-style:none;margin:0;padding:0;border-top:1px solid var(--line-soft)}
+.steps li{
+  display:grid;grid-template-columns:4.2rem 1fr auto;align-items:center;gap:.75rem;
+  padding:.62rem .25rem;border-bottom:1px solid var(--line-soft);
+  color:var(--dim-2);transition:color .25s,background .25s;
+}
+.steps .t{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.steps .w{font-family:var(--f-num);font-size:.85rem;color:var(--dim)}
+.steps li[data-state="done"]{color:#5E5449}
+.steps li[data-state="done"] .w{color:#5E5449}
+.steps li[data-state="done"] .what{text-decoration:line-through;text-decoration-thickness:1px}
+.steps li[data-state="now"]{color:var(--text);background:var(--panel);font-weight:700}
+.steps li[data-state="now"] .t{color:var(--accent)}
+.steps li[data-state="next"]{color:var(--text)}
+
+/* ── 下段：操作 ─────────────────────────────────────────────── */
+.controls{display:flex;flex-direction:column;gap:.7rem;padding-top:1rem}
+.row{display:flex;gap:.5rem;flex-wrap:wrap}
+.btn{
+  border:1px solid var(--line);background:var(--panel);
+  padding:.55rem .95rem;border-radius:10px;cursor:pointer;font-size:.88rem;
+  transition:background .15s,border-color .15s;
+}
+.btn:hover{background:var(--panel-hi)}
+.btn[aria-pressed="true"]{border-color:var(--kraft);background:var(--panel-hi)}
+.btn.primary{
+  flex:1;min-height:3.6rem;font-size:1.15rem;font-weight:700;
+  background:var(--kraft);border-color:var(--kraft);color:#1A140F;
+}
+.btn.primary.running{background:transparent;color:var(--text);border-color:var(--line)}
+.btn.big{min-height:3.6rem;padding:.55rem 1.3rem}
+.hint{margin:0;font-size:.76rem;line-height:1.6;color:var(--dim)}
+
+/* 画面ふちのフラッシュ */
+.flash{
+  position:fixed;inset:0;pointer-events:none;opacity:0;z-index:5;
+  box-shadow:inset 0 0 0 12px var(--accent),inset 0 0 80px 12px rgba(240,165,74,.3);
+}
+.flash.fire{animation:flash 1.6s ease-out}
+@keyframes flash{0%{opacity:0}8%{opacity:1}30%{opacity:.25}45%{opacity:.9}100%{opacity:0}}
+
+@media (max-width:420px){
+  .spec{grid-template-columns:repeat(3,auto);row-gap:.6rem}
+  .steps li{grid-template-columns:3.6rem 1fr auto;gap:.5rem;font-size:.92rem}
+}
+@media (min-height:820px) and (min-width:700px){
+  .clock{font-size:11rem}
+}
+@media (prefers-reduced-motion:reduce){
+  .flash.fire{animation:none;opacity:.6}
+  *{transition-duration:.01ms !important}
+}
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage" data-phase="ready">
+  <div class="flash" id="flash"></div>
+
+  <header class="top">
+    <div class="brand">
+      <span class="brand-name">ドリップタイマー</span>
+      <span class="brand-sub">pour over</span>
+    </div>
+    <div class="seg" id="recipes" role="group" aria-label="レシピ"></div>
+  </header>
+
+  <div class="spec" id="spec"></div>
+
+  <main class="board">
+    <div class="mode" id="modeLabel">READY</div>
+    <div class="clock" id="clock" aria-label="経過時間">00:00</div>
+    <div class="track" id="track"><div class="fill" id="fill"></div></div>
+
+    <section class="now" aria-live="assertive">
+      <span class="now-label" id="nowLabel">開始ボタンを押して注ぎ始め</span>
+      <span class="now-main" id="nowMain"></span>
+      <span class="now-sub" id="nowSub"></span>
+      <div class="next" id="nextRow">
+        <span id="nextText"></span>
+        <b id="nextIn"></b>
+      </div>
+    </section>
+  </main>
+
+  <ol class="steps" id="steps"></ol>
+
+  <section class="controls">
+    <div class="row">
+      <button class="btn primary" id="startBtn" type="button">注ぎ始める</button>
+      <button class="btn big" id="resetBtn" type="button">リセット</button>
+    </div>
+    <div class="row">
+      <button class="btn" id="muteBtn" type="button" aria-pressed="false">音あり</button>
+      <button class="btn" id="countBtn" type="button" aria-pressed="true">3秒前カウント</button>
+      <button class="btn" id="testBtn" type="button">音を確認</button>
+    </div>
+    <p class="hint">iPhone で鳴らないときは、消音スイッチを解除して音量を上げてください。タイマー中は画面が消えないようにしています。</p>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ── レシピ（カード「YOUR FIRST BREWS」より） ──────────
+     steps の t は注ぎ始めからの秒数、g はその時点で注ぎ終える累計量 */
+  var RECIPES = [
+    {id:"12g", coffee:12, grind:"中挽き", water:200, temp:94, rate:5,
+     steps:[{t:0,g:40},{t:40,g:90},{t:80,g:150},{t:110,g:200},{t:140}]},
+    {id:"16g", coffee:16, grind:"粗挽き", water:260, temp:96, rate:5,
+     steps:[{t:0,g:60},{t:40,g:110},{t:70,g:160},{t:100,g:210},{t:130,g:260},{t:150}]}
+  ];
+
+  var $ = function(id){ return document.getElementById(id); };
+  var stage=$("stage"), clockEl=$("clock"), fillEl=$("fill"), trackEl=$("track"),
+      recipesEl=$("recipes"), specEl=$("spec"), stepsEl=$("steps"), flashEl=$("flash"),
+      modeLabel=$("modeLabel"), nowLabel=$("nowLabel"), nowMain=$("nowMain"), nowSub=$("nowSub"),
+      nextRow=$("nextRow"), nextText=$("nextText"), nextIn=$("nextIn"),
+      startBtn=$("startBtn"), resetBtn=$("resetBtn"),
+      muteBtn=$("muteBtn"), countBtn=$("countBtn"), testBtn=$("testBtn");
+
+  /* ── 状態 ───────────────────────────────────────────── */
+  var recipe = RECIPES[0];
+  var elapsedMs = 0;
+  var running = false;
+  var startAt = 0;
+  var fired = {};
+  var counted = {};
+  var timer = 0;
+  var muted = false;
+  var countOn = true;
+  var wakeLock = null;
+
+  /* ── 設定の保存（この端末のブラウザ内だけの控え） ────── */
+  function saveCfg(){
+    try{
+      localStorage.setItem("drip-timer", JSON.stringify({r:recipe.id, m:muted, c:countOn}));
+    }catch(e){}
+  }
+  function loadCfg(){
+    try{
+      var raw = localStorage.getItem("drip-timer");
+      if(!raw) return;
+      var c = JSON.parse(raw), i;
+      for(i=0;i<RECIPES.length;i++){ if(c && RECIPES[i].id === c.r) recipe = RECIPES[i]; }
+      if(c && typeof c.m === "boolean") muted = c.m;
+      if(c && typeof c.c === "boolean") countOn = c.c;
+    }catch(e){}
+  }
+
+  /* ── 音（Web Audio・外部ファイルなし） ──────────────── */
+  var ac = null, live = [];
+  var SILENT_WAV = "data:audio/wav;base64,UklGRsQPAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaAPAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICA";
+  var silentEl = null;
+  /* iPhone は消音スイッチが入っていると Web Audio を鳴らさないため、
+     無音の音声を再生して出力を「メディア」扱いに切り替える */
+  function unlockOutput(){
+    try{ if(navigator.audioSession){ navigator.audioSession.type = "playback"; } }catch(e){}
+    try{
+      if(!silentEl){
+        silentEl = document.createElement("audio");
+        silentEl.setAttribute("playsinline","");
+        silentEl.loop = true;
+        silentEl.preload = "auto";
+        silentEl.src = SILENT_WAV;
+      }
+      if(silentEl.paused){
+        var pr = silentEl.play();
+        if(pr && pr.catch){ pr.catch(function(){}); }
+      }
+    }catch(e){}
+  }
+  function audio(){
+    unlockOutput();
+    if(!ac){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      ac = new C();
+    }
+    if(ac.state === "suspended"){ ac.resume(); }
+    return ac;
+  }
+  function beep(at, dur, freq, vol){
+    var c = audio(); if(!c || muted) return;
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(freq, at);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(at); o.stop(at + dur + 0.03);
+    live.push(o);
+    o.onended = function(){ var i = live.indexOf(o); if(i>=0) live.splice(i,1); };
+  }
+  function stopSound(){
+    for(var i=live.length-1;i>=0;i--){ try{ live[i].stop(); }catch(e){} }
+    live = [];
+  }
+  function playChime(notes){
+    var c = audio(); if(!c) return;
+    var t = c.currentTime + 0.02, i;
+    for(i=0;i<notes.length;i++){
+      beep(t, notes[i][1], notes[i][0], 0.4);
+      t += notes[i][1] + 0.04;
+    }
+  }
+  function playCount(){
+    var c = audio(); if(!c) return;
+    beep(c.currentTime + 0.01, 0.08, 880, 0.22);
+  }
+  function playPour(){ playChime([[1318,.32],[1318,.32]]); }
+  function playDone(){ playChime([[1046,.2],[1318,.2],[1568,.2],[2093,.55]]); }
+  function vibrate(p){ try{ if(navigator.vibrate && !muted) navigator.vibrate(p); }catch(e){} }
+
+  /* ── 表示用 ─────────────────────────────────────────── */
+  function fmt(sec){
+    sec = Math.max(0, Math.floor(sec));
+    var m = Math.floor(sec/60), s = sec % 60;
+    return (m<10?"0":"") + m + ":" + (s<10?"0":"") + s;
+  }
+  function lastStep(){ return recipe.steps[recipe.steps.length-1]; }
+  function isPour(st){ return typeof st.g === "number"; }
+  function prevG(i){ return i > 0 ? recipe.steps[i-1].g : 0; }
+  function stepText(st){ return isPour(st) ? st.g + "g まで注ぐ" : "完成"; }
+  /* 現在のステップ番号（開始前は -1） */
+  function currentIndex(){
+    if(!running && elapsedMs === 0) return -1;
+    var sec = elapsedMs/1000, idx = 0, i;
+    for(i=0;i<recipe.steps.length;i++){ if(recipe.steps[i].t <= sec) idx = i; }
+    return idx;
+  }
+
+  function buildRecipe(){
+    var i;
+    recipesEl.innerHTML = "";
+    for(i=0;i<RECIPES.length;i++){
+      (function(r){
+        var b = document.createElement("button");
+        b.type = "button";
+        b.textContent = r.coffee + "g / " + r.water + "ml";
+        b.setAttribute("aria-pressed", r === recipe ? "true" : "false");
+        b.addEventListener("click", function(){ if(!running){ recipe = r; saveCfg(); buildRecipe(); reset(); } });
+        recipesEl.appendChild(b);
+      })(RECIPES[i]);
+    }
+
+    specEl.innerHTML =
+      "<span>豆<b>" + recipe.coffee + "g</b></span>" +
+      "<span>挽き目<b style=\"font-family:var(--f-ja)\">" + recipe.grind + "</b></span>" +
+      "<span>湯量<b>" + recipe.water + "ml</b></span>" +
+      "<span>湯温<b>" + recipe.temp + "℃</b></span>" +
+      "<span>注ぐ速さ<b>" + recipe.rate + "g/s</b></span>";
+
+    stepsEl.innerHTML = "";
+    for(i=0;i<recipe.steps.length;i++){
+      var st = recipe.steps[i], li = document.createElement("li");
+      li.innerHTML = '<span class="t"></span><span class="what"></span><span class="w"></span>';
+      li.children[0].textContent = fmt(st.t);
+      li.children[1].textContent = isPour(st) ? "スパイラルで " + st.g + "g まで" : "完成 — お楽しみください";
+      li.children[2].textContent = isPour(st) ? "+" + (st.g - prevG(i)) + "g" : "";
+      stepsEl.appendChild(li);
+    }
+
+    var old = trackEl.querySelectorAll(".notch");
+    for(i=0;i<old.length;i++) old[i].remove();
+    for(i=1;i<recipe.steps.length-1;i++){
+      var n = document.createElement("div");
+      n.className = "notch";
+      n.style.left = (recipe.steps[i].t / lastStep().t * 100) + "%";
+      trackEl.appendChild(n);
+    }
+  }
+
+  function render(){
+    var sec = elapsedMs/1000, idx = currentIndex(), i;
+    var done = idx === recipe.steps.length-1;
+    clockEl.textContent = fmt(sec);
+    fillEl.style.width = Math.min(100, sec / lastStep().t * 100) + "%";
+
+    var phase = idx < 0 ? "ready" : (done ? "done" : "pour");
+    stage.dataset.phase = phase;
+    modeLabel.textContent = done ? "ENJOY" : (running ? "BREWING" : (idx < 0 ? "READY" : "PAUSED"));
+    startBtn.textContent = running ? "一時停止" : (idx < 0 ? "注ぎ始める" : (done ? "もう一度淹れる" : "再開"));
+    startBtn.classList.toggle("running", running);
+
+    var showIdx = Math.max(0, idx), cur = recipe.steps[showIdx];
+    if(idx < 0){
+      nowLabel.textContent = "開始ボタンを押して注ぎ始め";
+    }else if(done){
+      nowLabel.textContent = fmt(cur.t) + " — 抽出終了";
+    }else{
+      nowLabel.textContent = fmt(cur.t) + " — いまの注ぎ";
+    }
+    if(isPour(cur)){
+      nowMain.innerHTML = 'スパイラルで <span class="g"></span> まで';
+      nowMain.firstElementChild.textContent = cur.g + "g";
+      var add = cur.g - prevG(showIdx);
+      nowSub.textContent = "+" + add + "g（約" + Math.round(add / recipe.rate) + "秒かけて）";
+    }else{
+      nowMain.textContent = "完成 — お楽しみください";
+      nowSub.textContent = "ドリッパーを外して、味を見て次回の調整を。";
+    }
+
+    var nx = recipe.steps[showIdx+1];
+    if(nx){
+      nextRow.hidden = false;
+      nextText.textContent = "次: " + fmt(nx.t) + " " + stepText(nx);
+      var left = Math.max(0, Math.ceil(nx.t - sec));
+      nextIn.textContent = idx < 0 ? "" : "あと " + fmt(left);
+      nextIn.classList.toggle("soon", running && left <= 5);
+    }else{
+      nextRow.hidden = true;
+    }
+
+    var items = stepsEl.children;
+    for(i=0;i<items.length;i++){
+      items[i].dataset.state = i < idx ? "done" : (i === idx ? "now" : (i === idx+1 ? "next" : "pending"));
+    }
+  }
+
+  function flash(){
+    flashEl.classList.remove("fire");
+    void flashEl.offsetWidth;
+    flashEl.classList.add("fire");
+  }
+
+  /* ── 通知の判定 ─────────────────────────────────────── */
+  function checkAlerts(){
+    var sec = elapsedMs/1000, i, st;
+    for(i=1;i<recipe.steps.length;i++){
+      st = recipe.steps[i];
+      if(countOn && !counted[i] && sec >= st.t - 3 && sec < st.t){
+        var n = Math.ceil(st.t - sec);
+        if(counted["n"+i] !== n){ counted["n"+i] = n; playCount(); }
+        if(n <= 1) counted[i] = true;
+      }
+      if(!fired[i] && sec >= st.t){
+        fired[i] = true;
+        flash();
+        if(isPour(st)){ playPour(); vibrate([200,100,200]); }
+        else{ playDone(); vibrate([300,120,300,120,500]); finish(); return; }
+      }
+    }
+  }
+
+  /* ── ループ（画面が裏に回っても進むよう setInterval） ── */
+  function loop(){
+    if(!running) return;
+    elapsedMs = performance.now() - startAt;
+    checkAlerts();
+    render();
+  }
+
+  /* ── 操作 ───────────────────────────────────────────── */
+  function start(){
+    audio();
+    if(elapsedMs === 0){ fired[0] = true; flash(); playPour(); vibrate(200); }
+    running = true;
+    startAt = performance.now() - elapsedMs;
+    requestWake();
+    clearInterval(timer);
+    timer = setInterval(loop, 100);
+    render();
+  }
+  function pause(){
+    running = false;
+    clearInterval(timer);
+    stopSound();
+    releaseWake();
+    render();
+  }
+  /* 完成で止める（鳴っているチャイムは止めない） */
+  function finish(){
+    running = false;
+    clearInterval(timer);
+    releaseWake();
+    elapsedMs = lastStep().t * 1000;
+    setRecipeLock();
+  }
+  function reset(){
+    pause();
+    elapsedMs = 0;
+    fired = {};
+    counted = {};
+    flashEl.classList.remove("fire");
+    render();
+  }
+  function setRecipeLock(){
+    var bs = recipesEl.querySelectorAll("button"), i;
+    for(i=0;i<bs.length;i++) bs[i].disabled = running;
+  }
+
+  /* ── 画面スリープ防止 ───────────────────────────────── */
+  function requestWake(){
+    if(!("wakeLock" in navigator)) return;
+    try{
+      navigator.wakeLock.request("screen").then(function(w){ wakeLock = w; }, function(){});
+    }catch(e){}
+  }
+  function releaseWake(){
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible" && running) requestWake();
+  });
+
+  /* ── イベント ───────────────────────────────────────── */
+  startBtn.addEventListener("click", function(){
+    if(running) pause();
+    else{ if(currentIndex() === recipe.steps.length-1) reset(); start(); }
+    setRecipeLock();
+  });
+  resetBtn.addEventListener("click", function(){ reset(); setRecipeLock(); });
+
+  function syncToggles(){
+    muteBtn.textContent = muted ? "ミュート中" : "音あり";
+    muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    countBtn.setAttribute("aria-pressed", countOn ? "true" : "false");
+  }
+  muteBtn.addEventListener("click", function(){
+    muted = !muted;
+    if(muted) stopSound();
+    syncToggles(); saveCfg();
+  });
+  countBtn.addEventListener("click", function(){
+    countOn = !countOn;
+    syncToggles(); saveCfg();
+  });
+  testBtn.addEventListener("click", function(){
+    audio(); flash(); playPour();
+  });
+
+  document.addEventListener("keydown", function(e){
+    var k = e.key.toLowerCase();
+    if(e.code === "Space" || k === " "){ e.preventDefault(); startBtn.click(); }
+    else if(k === "r"){ e.preventDefault(); resetBtn.click(); }
+    else if(k === "m"){ e.preventDefault(); muteBtn.click(); }
+  });
+
+  /* ── 起動 ───────────────────────────────────────────── */
+  loadCfg();
+  syncToggles();
+  buildRecipe();
+  render();
+})();
+</script>
+</body>
+</html>
