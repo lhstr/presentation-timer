@@ -55,7 +55,7 @@ button{font:inherit;color:inherit}
 /* ── 上段：レシピ選択 ───────────────────────────────────────── */
 .top{
   display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;
-  padding:1rem 0 .75rem;border-bottom:1px solid var(--line-soft);
+  padding:.75rem 0 .6rem;border-bottom:1px solid var(--line-soft);
 }
 .brand{display:flex;align-items:baseline;gap:.6rem}
 .brand-name{font-weight:700;letter-spacing:.06em;font-size:1rem}
@@ -70,7 +70,7 @@ button{font:inherit;color:inherit}
 
 .spec{
   display:grid;grid-template-columns:repeat(5,auto);justify-content:space-between;gap:.5rem;
-  padding:.7rem 0;border-bottom:1px solid var(--line-soft);
+  padding:.55rem 0;border-bottom:1px solid var(--line-soft);
   font-size:.8rem;color:var(--dim-2);
 }
 .spec span{display:flex;flex-direction:column;gap:.1rem;white-space:nowrap}
@@ -78,8 +78,8 @@ button{font:inherit;color:inherit}
 
 /* ── 中段：時計と指示 ───────────────────────────────────────── */
 .board{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:.9rem;padding:1.25rem 0;text-align:center;
+  display:flex;flex-direction:column;align-items:center;
+  gap:.75rem;padding:.9rem 0 1.25rem;text-align:center;
 }
 .mode{
   font-family:var(--f-num);font-size:.75rem;letter-spacing:.2em;color:var(--dim);
@@ -145,6 +145,7 @@ button{font:inherit;color:inherit}
 /* ── 下段：操作 ─────────────────────────────────────────────── */
 .controls{display:flex;flex-direction:column;gap:.7rem;padding-top:1rem}
 .row{display:flex;gap:.5rem;flex-wrap:wrap}
+.row.main{width:100%}
 .btn{
   border:1px solid var(--line);background:var(--panel);
   padding:.55rem .95rem;border-radius:10px;cursor:pointer;font-size:.88rem;
@@ -169,7 +170,8 @@ button{font:inherit;color:inherit}
 @keyframes flash{0%{opacity:0}8%{opacity:1}30%{opacity:.25}45%{opacity:.9}100%{opacity:0}}
 
 @media (max-width:420px){
-  .spec{grid-template-columns:repeat(3,auto);row-gap:.6rem}
+  .spec{gap:.25rem;font-size:.72rem}
+  .spec b{font-size:.9rem}
   .steps li{grid-template-columns:3.6rem 1fr auto;gap:.5rem;font-size:.92rem}
 }
 @media (min-height:820px) and (min-width:700px){
@@ -201,6 +203,11 @@ button{font:inherit;color:inherit}
     <div class="clock" id="clock" aria-label="経過時間">00:00</div>
     <div class="track" id="track"><div class="fill" id="fill"></div></div>
 
+    <div class="row main">
+      <button class="btn primary" id="startBtn" type="button">注ぎ始める</button>
+      <button class="btn big" id="resetBtn" type="button">リセット</button>
+    </div>
+
     <section class="now" aria-live="assertive">
       <span class="now-label" id="nowLabel">開始ボタンを押して注ぎ始め</span>
       <span class="now-main" id="nowMain"></span>
@@ -215,10 +222,6 @@ button{font:inherit;color:inherit}
   <ol class="steps" id="steps"></ol>
 
   <section class="controls">
-    <div class="row">
-      <button class="btn primary" id="startBtn" type="button">注ぎ始める</button>
-      <button class="btn big" id="resetBtn" type="button">リセット</button>
-    </div>
     <div class="row">
       <button class="btn" id="muteBtn" type="button" aria-pressed="false">音あり</button>
       <button class="btn" id="countBtn" type="button" aria-pressed="true">3秒前カウント</button>
